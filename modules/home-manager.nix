@@ -382,6 +382,7 @@ let
       export ANTHROPIC_BASE_URL=${baseUrl}
       export ANTHROPIC_AUTH_TOKEN="$key"
       export ANTHROPIC_MODEL="$model"
+      export CLAUDE_CODE_MAX_OUTPUT_TOKENS="''${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-${toString cfg.maxOutputTokens}}"
 
       export ANTHROPIC_DEFAULT_OPUS_MODEL="$opus"
       export ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=${lib.escapeShellArg cfg.models.opus.name}
@@ -456,6 +457,12 @@ in
       type = lib.types.str;
       default = "claude";
       description = "Claude Code executable invoked by the launcher.";
+    };
+
+    maxOutputTokens = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 128000;
+      description = "Default Claude Code output-token ceiling. An existing CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable takes precedence.";
     };
 
     installAcceptancePrompt = lib.mkOption {

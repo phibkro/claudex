@@ -87,6 +87,18 @@ CLAUDEX_MODEL=gpt-5.6-terra claudex
 
 Normal `claude` continues to use its ordinary Anthropic configuration.
 
+ClaudeX defaults Claude Code's output ceiling to 128,000 tokens, matching the
+catalogued maximum completion size of the default OpenAI models. Override it for
+one session when a smaller budget is preferable:
+
+```bash
+CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000 claudex
+```
+
+The model's 372,000-token context window includes both input and output. A large
+ceiling permits long compaction summaries but does not require responses to use
+that budget.
+
 ## Quota and plan-change recovery
 
 A healthy `/healthz` or model list proves transport readiness, not generation
@@ -109,6 +121,7 @@ and rerun recovery. `claudex-doctor --since "2 hours ago"` reports recent 401,
 programs.claudex = {
   enable = true;
   port = 8317;
+  maxOutputTokens = 128000;
   models.opus.id = "gpt-5.6-sol";
   models.sonnet.id = "gpt-5.6-terra";
   models.haiku.id = "gpt-5.6-luna";

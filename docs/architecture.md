@@ -22,7 +22,7 @@ Claude Code harness
        via ChatGPT OAuth
 ```
 
-Claude Code is pointed at the gateway with `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. Its ordinary configuration is not modified; the environment exists only inside the `claudex` launcher.
+Claude Code is pointed at the gateway with `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. The launcher also defaults `CLAUDE_CODE_MAX_OUTPUT_TOKENS` to 128,000, matching the catalogued completion limit of the default Codex models while allowing an inherited value to override it. Ordinary Claude Code configuration is not modified; this environment exists only inside the `claudex` launcher.
 
 ## Components
 
