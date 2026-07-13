@@ -28,7 +28,7 @@ Claude Code is pointed at the gateway with `ANTHROPIC_BASE_URL` and `ANTHROPIC_A
 
 ### Package
 
-`packages/cliproxyapi.nix` builds a pinned CLIProxyAPI release from source with fixed source and Go-vendor hashes. It applies one narrow patch: `-local-model` also suppresses the unrelated Antigravity catalog refresher.
+`packages/cliproxyapi.nix` builds a pinned CLIProxyAPI release from source with fixed source and Go-vendor hashes. Its narrow patches suppress the unrelated Antigravity catalog refresher in `-local-model` mode and log provider type instead of the credential ID derived from the OAuth filename.
 
 ### Runtime initialization
 
@@ -46,9 +46,11 @@ The config is regenerated from declared policy at each start. The random downstr
 
 `claudex.service` runs on demand as a hardened systemd user service. It listens only on `127.0.0.1`, and it has no install target, so enabling the module does not create an always-running daemon.
 
-### Launcher
+### Launcher and diagnostics
 
-`claudex` initializes state, starts the service, waits for `/healthz`, exports gateway/model metadata, and execs Claude Code.
+`claudex` initializes state, starts the service, waits for `/healthz`, exports gateway/model metadata, and execs Claude Code. `/healthz` is intentionally only a transport check.
+
+`claudex-doctor` separately checks service state, loopback binding, downstream authentication, recent HTTP outcomes, and—when passed `--probe`—generation readiness for all three aliases. `claudex-recover` restarts transient in-memory cooldown state and runs those probes.
 
 ### Model aliases
 

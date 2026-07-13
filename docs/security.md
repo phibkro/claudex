@@ -15,6 +15,8 @@ ClaudeX reduces exposure; it does not eliminate the trust placed in CLIProxyAPI 
 - Request-body logging and usage statistics are disabled.
 - Remote model-catalog updates are disabled.
 - The unrelated Antigravity updater is patched out in local-model mode.
+- Info/warning route logs emit the provider type rather than credential IDs derived from OAuth filenames.
+- Diagnostic error messages redact email-shaped strings before printing.
 - The service starts only when `claudex` is used.
 - `ANTHROPIC_API_KEY` is removed from the launched environment so it cannot bypass the gateway token.
 
@@ -63,5 +65,5 @@ The Nix build pins CLIProxyAPI source and dependencies. Updates are deliberate h
 2. Review Anthropic-to-Codex translators.
 3. Recheck listener and management defaults.
 4. Recheck request logging.
-5. Reapply or retire the local-model updater patch.
-6. Run the complete acceptance test.
+5. Reapply or retire the local-model updater and credential-log patches.
+6. Run `claudex-doctor --probe` and the complete acceptance test.

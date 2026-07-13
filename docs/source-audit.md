@@ -47,6 +47,12 @@ The proxy necessarily receives complete model requests.
 
 **Response:** request logging, file logging, usage statistics, management, and plugins are disabled. This does not remove runtime trust in the process.
 
+### Credential identity appeared in operational logs
+
+Session-affinity info logs and selected warning/error paths printed `auth.ID`, which is derived from the OAuth filename and can contain an account identifier.
+
+**Response:** the Nix patch substitutes `auth.Provider` only at logging call sites; cache keys and credential selection continue using the unmodified ID. Model audits retain `auth=codex` evidence without exposing the backing filename.
+
 ### Deferred ToolSearch mismatch
 
 Claude Code's custom-gateway ToolSearch requires `tool_reference` forwarding. The relevant translation was not present in the Codex translator.

@@ -134,6 +134,7 @@ let
     runtimeInputs = [
       pkgs.coreutils
       pkgs.curl
+      pkgs.gnugrep
       pkgs.systemd
     ];
     text = ''
@@ -148,6 +149,185 @@ let
       else
         echo "claudex-status: not initialized; run claudex-login" >&2
       fi
+
+      if journalctl --user -u claudex.service --since "15 minutes ago" --no-pager -o cat \
+          | grep -Eq '] (429|500) \\|'; then
+        echo >&2
+        echo "claudex-status: recent generation failures detected; run claudex-doctor" >&2
+      fi
+    '';
+  };
+
+  doctor = pkgs.writeShellApplication {
+    name = "claudex-doctor";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.iproute2
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      umask 077
+      probe=false
+      since="30 minutes ago"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --probe) probe=true; shift ;;
+          --since)
+            if [ "$#" -lt 2 ]; then
+              echo "claudex-doctor: --since requires a value" >&2
+              exit 2
+            fi
+            since=$2
+            shift 2
+            ;;
+          -h|--help)
+            echo "usage: claudex-doctor [--probe] [--since TIME]"
+            echo "  --probe  make one minimal generation request per configured tier"
+            exit 0
+            ;;
+          *) echo "claudex-doctor: unknown argument: $1" >&2; exit 2 ;;
+        esac
+      done
+
+      state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/claudex"
+      key_file="$state_dir/api-key"
+      fail=0
+
+      if systemctl --user is-active --quiet claudex.service; then
+        echo "service=PASS active"
+      else
+        echo "service=FAIL inactive"
+        fail=1
+      fi
+
+      listeners=$(ss -H -ltn 'sport = :${toString cfg.port}' || true)
+      if printf '%s\n' "$listeners" | grep -q '127.0.0.1:${toString cfg.port}' \
+          && ! printf '%s\n' "$listeners" | grep -Eq '0.0.0.0:${toString cfg.port}|\[::\]:${toString cfg.port}'; then
+        echo "listener=PASS loopback-only"
+      else
+        echo "listener=FAIL expected only 127.0.0.1:${toString cfg.port}"
+        fail=1
+      fi
+
+      health_code=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+        --max-time 5 ${baseUrl}/healthz || true)
+      if [ "$health_code" = 200 ]; then
+        echo "transport=PASS healthz=200"
+      else
+        echo "transport=FAIL healthz=$health_code"
+        fail=1
+      fi
+
+      unauth_code=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+        --max-time 5 ${baseUrl}/v1/models || true)
+      if [ "$unauth_code" = 401 ]; then
+        echo "downstream-auth=PASS unauthenticated=401"
+      else
+        echo "downstream-auth=FAIL unauthenticated=$unauth_code"
+        fail=1
+      fi
+
+      if [ -s "$key_file" ]; then
+        key=$(tr -d '\n' < "$key_file")
+        auth_code=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+          --max-time 5 -H "Authorization: Bearer $key" ${baseUrl}/v1/models || true)
+      else
+        key=""
+        auth_code="missing-key"
+      fi
+      if [ "$auth_code" = 200 ]; then
+        echo "credential-routing=PASS authenticated-models=200"
+      else
+        echo "credential-routing=FAIL authenticated-models=$auth_code"
+        fail=1
+      fi
+
+      logs=$(mktemp)
+      trap 'rm -f "$logs"' EXIT
+      journalctl --user -u claudex.service --since "$since" --no-pager -o cat > "$logs" || true
+      for code in 401 403 429 500; do
+        count=$(grep -E "] $code \\|" "$logs" \
+          | grep -Ec 'POST +"/v1/messages' || true)
+        echo "generation-journal-$code=$count since=$since"
+      done
+
+      probe_model() {
+        tier=$1
+        model=$2
+        body=$(mktemp)
+        payload=$(jq -nc --arg model "$model" '{model:$model,max_tokens:8,messages:[{role:"user",content:"Reply OK."}]}')
+        code=$(curl --silent --output "$body" --write-out '%{http_code}' \
+          --max-time 90 \
+          -H "Authorization: Bearer $key" \
+          -H 'content-type: application/json' \
+          -H 'anthropic-version: 2023-06-01' \
+          -X POST ${baseUrl}/v1/messages --data "$payload" || true)
+        if [ "$code" = 200 ] && jq -e '.type == "message"' "$body" >/dev/null 2>&1; then
+          echo "generation-$tier=PASS model=$model http=200"
+        else
+          error_type=$(jq -r '.error.type // "transport_error"' "$body" 2>/dev/null || echo transport_error)
+          raw_message=$(jq -r '.error.message // "no structured error"' "$body" 2>/dev/null || echo "no structured error")
+          error_message=$(printf '%s\n' "$raw_message" \
+            | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}/<redacted-email>/g' \
+            | cut -c1-240)
+          echo "generation-$tier=FAIL model=$model http=$code type=$error_type message=$error_message"
+          fail=1
+        fi
+        rm -f "$body"
+      }
+
+      if [ "$probe" = true ]; then
+        if [ -z "$key" ]; then
+          echo "generation=SKIP missing downstream key"
+          fail=1
+        else
+          probe_model opus ${lib.escapeShellArg cfg.models.opus.id}
+          probe_model sonnet ${lib.escapeShellArg cfg.models.sonnet.id}
+          probe_model haiku ${lib.escapeShellArg cfg.models.haiku.id}
+        fi
+      else
+        echo "generation=NOT_PROBED run: claudex-doctor --probe"
+      fi
+
+      exit "$fail"
+    '';
+  };
+
+  recover = pkgs.writeShellApplication {
+    name = "claudex-recover";
+    runtimeInputs = [
+      doctor
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.systemd
+    ];
+    text = ''
+      echo "claudex-recover: restarting proxy to clear stale provider cooldowns"
+      systemctl --user restart claudex.service
+      ready=false
+      for _ in $(seq 1 50); do
+        if curl --fail --silent ${baseUrl}/healthz >/dev/null; then
+          ready=true
+          break
+        fi
+        sleep 0.1
+      done
+      if [ "$ready" != true ]; then
+        echo "claudex-recover: proxy failed to restart" >&2
+        systemctl --user --no-pager status claudex.service >&2 || true
+        exit 1
+      fi
+      if ! claudex-doctor --probe "$@"; then
+        echo >&2
+        echo "claudex-recover: recovery probe failed" >&2
+        echo "  401/403: run claudex-login" >&2
+        echo "  429: wait for quota/plan propagation, then rerun claudex-recover" >&2
+        exit 1
+      fi
     '';
   };
 
@@ -161,7 +341,7 @@ let
     text = ''
       since="''${1:-15 minutes ago}"
       journalctl --user -u claudex.service --since "$since" --no-pager \
-        | sed -nE 's/.*auth=codex-[^ ]+ provider=[^ ]+ model=([^ ]+).*/auth=codex-oauth model=\1/p' \
+        | sed -nE 's/.*auth=codex provider=[^ ]+ model=([^ ]+).*/auth=codex-oauth model=\1/p' \
         | sort -u
     '';
   };
@@ -352,6 +532,8 @@ in
       init
       login
       status
+      doctor
+      recover
       modelAudit
       launcher
       acceptance

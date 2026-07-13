@@ -18,12 +18,23 @@ buildGoModule rec {
   subPackages = [ "cmd/server" ];
   vendorHash = "sha256-vQU3hLDga5PMUwH4KSB3T5sZ1uPUgHQHeyQGJTKHIYs=";
 
-  # Upstream's -local-model skips remote model catalogs but still starts an
-  # unrelated Antigravity updater. Keep this Codex-only proxy quiet instead.
+  # Keep local-model mode quiet and prevent credential IDs (upstream derives
+  # them from OAuth filenames) from entering the user journal. Provider names
+  # remain visible so model-route audits retain an external referent.
   postPatch = ''
     substituteInPlace cmd/server/main.go \
       --replace-fail 'misc.StartAntigravityVersionUpdater(context.Background())' \
       'if !localModel { misc.StartAntigravityVersionUpdater(context.Background()) }'
+
+    substituteInPlace sdk/cliproxy/auth/selector.go \
+      --replace-fail 'truncateSessionID(primaryID), auth.ID, provider, model)' \
+      'truncateSessionID(primaryID), auth.Provider, provider, model)' \
+      --replace-fail 'truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.ID, provider, model)' \
+      'truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.Provider, provider, model)'
+    substituteInPlace sdk/cliproxy/service.go \
+      --replace-fail 'op, auth.ID, err)' 'op, auth.Provider, err)'
+    substituteInPlace internal/pluginhost/adapters.go \
+      --replace-fail 'auth.ID, errModels)' 'auth.Provider, errModels)'
   '';
 
   ldflags = [

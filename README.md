@@ -70,7 +70,10 @@ claudex-login
 
 ```bash
 claudex                       # Claude Code with GPT-5.6 Sol by default
-claudex-status                # service state and available models
+claudex-status                # service state, models, and recent-failure hint
+claudex-doctor                # transport/auth checks + recent HTTP outcome counts
+claudex-doctor --probe        # also make one minimal request per model tier
+claudex-recover               # restart stale cooldown state and probe all tiers
 claudex-model-audit           # externally verify models used recently
 claudex-acceptance            # complete read-only harness test
 systemctl --user stop claudex # stop the on-demand proxy
@@ -83,6 +86,22 @@ CLAUDEX_MODEL=gpt-5.6-terra claudex
 ```
 
 Normal `claude` continues to use its ordinary Anthropic configuration.
+
+## Quota and plan-change recovery
+
+A healthy `/healthz` or model list proves transport readiness, not generation
+readiness. After exhausting usage or changing OpenAI plans, upstream entitlement
+may recover while CLIProxyAPI still holds a per-model cooldown in memory.
+
+```bash
+claudex-recover
+```
+
+This restarts only the user proxy, checks the loopback/auth boundaries, and makes
+a minimal request through Opus/Sonnet/Haiku. If it reports `401` or `403`, renew
+OAuth with `claudex-login`. If it reports `429`, wait for quota or plan propagation
+and rerun recovery. `claudex-doctor --since "2 hours ago"` reports recent 401,
+403, 429, and 500 counts without printing prompts, tokens, or account identifiers.
 
 ## Configuration
 
@@ -123,6 +142,7 @@ The original implementation's full acceptance record is in [validation-2026-07-1
 - [Research and sources](docs/research.md)
 - [Source audit](docs/source-audit.md)
 - [Acceptance prompt](docs/acceptance-prompt.md)
+- [Recovery validation](docs/validation-2026-07-13-recovery.md)
 - [Original implementation report](docs/implementation-report.md)
 
 ## License
