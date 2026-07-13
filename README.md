@@ -1,0 +1,130 @@
+# ClaudeX
+
+Run OpenAI Codex models inside the Claude Code harness.
+
+ClaudeX keeps Claude Code's terminal UI, repository instructions, agents, skills, hooks, permissions, web tools, and MCP integration while routing model requests through a local Anthropic-compatible gateway to ChatGPT/Codex OAuth.
+
+```text
+Claude Code
+    │  Anthropic Messages API
+    ▼
+CLIProxyAPI on 127.0.0.1
+    │  OpenAI Codex protocol
+    ▼
+ChatGPT/Codex OAuth
+```
+
+> [!WARNING]
+> This is an independent compatibility project, not an Anthropic or OpenAI product. Using subscription OAuth outside the vendor's own client may carry account-policy risk. The local proxy can see prompts, source excerpts, and tool results. Read [the security document](docs/security.md) before enabling it.
+
+## Features
+
+- Declarative Nix package pinned to CLIProxyAPI 7.2.72
+- Reusable Home Manager module
+- Loopback-only authenticated gateway
+- Private OAuth and downstream-key storage
+- Hardened on-demand systemd user service
+- Claude model aliases mapped to the GPT-5.6 family
+- Eager built-in tools for custom-gateway compatibility
+- Read-only acceptance test with external model evidence
+- Ordinary `claude` command remains unchanged
+
+## Model mapping
+
+| Claude selector | OpenAI model | Role |
+|---|---|---|
+| Opus | `gpt-5.6-sol` | Frontier |
+| Sonnet | `gpt-5.6-terra` | Balanced |
+| Haiku | `gpt-5.6-luna` | Fast/affordable |
+
+## Installation
+
+Add the flake input:
+
+```nix
+{
+  inputs.claudex.url = "github:phibkro/claudex";
+  inputs.claudex.inputs.nixpkgs.follows = "nixpkgs";
+}
+```
+
+Import and enable the Home Manager module:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.claudex.homeManagerModules.default ];
+  programs.claudex.enable = true;
+}
+```
+
+Claude Code must already be available as `claude`. Override `programs.claudex.claudeCommand` if it lives elsewhere.
+
+Apply your Home Manager or NixOS configuration, then authenticate once:
+
+```bash
+claudex-login
+```
+
+## Usage
+
+```bash
+claudex                       # Claude Code with GPT-5.6 Sol by default
+claudex-status                # service state and available models
+claudex-model-audit           # externally verify models used recently
+claudex-acceptance            # complete read-only harness test
+systemctl --user stop claudex # stop the on-demand proxy
+```
+
+Choose another startup model without changing picker aliases:
+
+```bash
+CLAUDEX_MODEL=gpt-5.6-terra claudex
+```
+
+Normal `claude` continues to use its ordinary Anthropic configuration.
+
+## Configuration
+
+```nix
+programs.claudex = {
+  enable = true;
+  port = 8317;
+  models.opus.id = "gpt-5.6-sol";
+  models.sonnet.id = "gpt-5.6-terra";
+  models.haiku.id = "gpt-5.6-luna";
+};
+```
+
+See `modules/home-manager.nix` for all options.
+
+## Evidence
+
+Provider identity is never accepted from model prose. The proxy journal is the external referent:
+
+```bash
+claudex-model-audit "30 minutes ago"
+```
+
+A successful three-tier run produces:
+
+```text
+auth=codex-oauth model=gpt-5.6-luna
+auth=codex-oauth model=gpt-5.6-sol
+auth=codex-oauth model=gpt-5.6-terra
+```
+
+The original implementation's full acceptance record is in [validation-2026-07-13.md](docs/validation-2026-07-13.md).
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Security](docs/security.md)
+- [Research and sources](docs/research.md)
+- [Source audit](docs/source-audit.md)
+- [Acceptance prompt](docs/acceptance-prompt.md)
+- [Original implementation report](docs/implementation-report.md)
+
+## License
+
+ClaudeX's Nix integration and documentation are MIT licensed. CLIProxyAPI is a separately maintained MIT-licensed upstream dependency; this repository pins and patches its source during the Nix build.
