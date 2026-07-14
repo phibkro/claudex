@@ -69,6 +69,7 @@
             grep -F 'disableClaudeAiConnectors' "$launcher"
             grep -F 'disableRemoteControl' "$launcher"
             grep -F 'disableWorkflows' "$launcher"
+            grep -F 'Remote Control is disabled for the Codex gateway' "$launcher"
             touch $out
           '';
           format = pkgs.runCommand "claudex-format-check" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''

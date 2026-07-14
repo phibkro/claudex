@@ -419,8 +419,14 @@ let
       # expose built-ins eagerly for ordinary sessions instead.
       eager_tools=${lib.escapeShellArg (lib.concatStringsSep "," cfg.eagerTools)}
       case "''${1:-}" in
-        agents|auth|auto-mode|doctor|install|mcp|migrate|plugin|remote-control|setup-token|skill|telemetry|update|ultrareview|upgrade)
-          exec ${lib.escapeShellArg cfg.claudeCommand} --settings "$compat_settings" "$@"
+        remote-control)
+          echo "claudex: Remote Control is disabled for the Codex gateway" >&2
+          exit 1
+          ;;
+        agents|auth|auto-mode|doctor|install|mcp|migrate|plugin|setup-token|skill|telemetry|update|ultrareview|upgrade)
+          # Claude Code does not accept the global --settings option before
+          # maintenance subcommands. These do not start a model session.
+          exec ${lib.escapeShellArg cfg.claudeCommand} "$@"
           ;;
       esac
       for arg in "$@"; do
