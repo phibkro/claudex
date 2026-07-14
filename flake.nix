@@ -45,24 +45,32 @@
         system:
         let
           pkgs = pkgsFor system;
+          moduleConfig = home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            modules = [
+              self.homeManagerModules.default
+              {
+                home = {
+                  username = "claudex-test";
+                  homeDirectory = "/home/claudex-test";
+                  stateVersion = "26.05";
+                };
+                programs.claudex.enable = true;
+              }
+            ];
+          };
         in
         {
           inherit (self.packages.${system}) cliproxyapi;
-          module =
-            (home-manager.lib.homeManagerConfiguration {
-              inherit pkgs;
-              modules = [
-                self.homeManagerModules.default
-                {
-                  home = {
-                    username = "claudex-test";
-                    homeDirectory = "/home/claudex-test";
-                    stateVersion = "26.05";
-                  };
-                  programs.claudex.enable = true;
-                }
-              ];
-            }).activationPackage;
+          module = moduleConfig.activationPackage;
+          compatibility-policy = pkgs.runCommand "claudex-compatibility-policy-check" { } ''
+            launcher=${moduleConfig.activationPackage}/home-path/bin/claudex
+            grep -F 'export CLAUDE_CODE_DISABLE_WORKFLOWS=1' "$launcher"
+            grep -F 'disableClaudeAiConnectors' "$launcher"
+            grep -F 'disableRemoteControl' "$launcher"
+            grep -F 'disableWorkflows' "$launcher"
+            touch $out
+          '';
           format = pkgs.runCommand "claudex-format-check" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             nixfmt --check ${./flake.nix} ${./modules/home-manager.nix} ${./packages/cliproxyapi.nix}
             touch $out

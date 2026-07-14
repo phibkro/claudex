@@ -383,6 +383,20 @@ let
       export ANTHROPIC_AUTH_TOKEN="$key"
       export ANTHROPIC_MODEL="$model"
       export CLAUDE_CODE_MAX_OUTPUT_TOKENS="''${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-${toString cfg.maxOutputTokens}}"
+      export CLAUDE_CODE_DISABLE_WORKFLOWS=1
+
+      # Claude dynamic workflows can multiply independent Codex requests and
+      # retries far beyond the upstream agent defaults. The remaining settings
+      # disable Anthropic account-bound surfaces that have no Codex OAuth peer.
+      compat_settings=${
+        lib.escapeShellArg (
+          builtins.toJSON {
+            disableClaudeAiConnectors = true;
+            disableRemoteControl = true;
+            disableWorkflows = true;
+          }
+        )
+      }
 
       export ANTHROPIC_DEFAULT_OPUS_MODEL="$opus"
       export ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=${lib.escapeShellArg cfg.models.opus.name}
@@ -406,15 +420,15 @@ let
       eager_tools=${lib.escapeShellArg (lib.concatStringsSep "," cfg.eagerTools)}
       case "''${1:-}" in
         agents|auth|auto-mode|doctor|install|mcp|migrate|plugin|remote-control|setup-token|skill|telemetry|update|ultrareview|upgrade)
-          exec ${lib.escapeShellArg cfg.claudeCommand} "$@"
+          exec ${lib.escapeShellArg cfg.claudeCommand} --settings "$compat_settings" "$@"
           ;;
       esac
       for arg in "$@"; do
         case "$arg" in
-          --tools|--tools=*) exec ${lib.escapeShellArg cfg.claudeCommand} "$@" ;;
+          --tools|--tools=*) exec ${lib.escapeShellArg cfg.claudeCommand} --settings "$compat_settings" "$@" ;;
         esac
       done
-      exec ${lib.escapeShellArg cfg.claudeCommand} "$@" --tools "$eager_tools"
+      exec ${lib.escapeShellArg cfg.claudeCommand} --settings "$compat_settings" "$@" --tools "$eager_tools"
     '';
   };
 

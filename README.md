@@ -99,6 +99,14 @@ The model's 372,000-token context window includes both input and output. A large
 ceiling permits long compaction summaries but does not require responses to use
 that budget.
 
+ClaudeX disables Claude Code's dynamic workflows, including bundled
+`deep-research`, because their recursive fan-out and independent retries can
+overwhelm Codex request limits. Ordinary agents, hooks, skills, MCP servers, and
+parallel tool calls remain available. Claude.ai connectors and Remote Control
+are also disabled because they require Anthropic account services rather than
+the local Codex gateway. These restrictions apply only to `claudex`; ordinary
+`claude` sessions are unchanged.
+
 ## Quota and plan-change recovery
 
 A healthy `/healthz` or model list proves transport readiness, not generation
@@ -153,6 +161,7 @@ The original implementation's full acceptance record is in [validation-2026-07-1
 - [Architecture](docs/architecture.md)
 - [Security](docs/security.md)
 - [Research and sources](docs/research.md)
+- [Codex ↔ Claude Code capability matrix](docs/capability-compatibility.md)
 - [Source audit](docs/source-audit.md)
 - [Acceptance prompt](docs/acceptance-prompt.md)
 - [Recovery validation](docs/validation-2026-07-13-recovery.md)
